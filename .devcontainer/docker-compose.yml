@@ -1,0 +1,37 @@
+services:
+  app:
+    container_name: mind-app
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ..:/workspace
+    command: sleep infinity
+    depends_on:
+      - db
+    env_file:
+      - devcontainer.env
+    ports:
+      - "8000:8000"
+    networks:
+      - mind-net
+
+  db:
+    container_name: mind-db
+    image: postgres:15
+    restart: always
+    ports:
+      - "5432:5432"
+    env_file:
+      - devcontainer.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - mind-net
+
+volumes:
+  pgdata:
+
+
+networks:
+  mind-net:

@@ -4,12 +4,13 @@ Travel Controller Module
 GPS 기반 주변 관광지 목록 조회 API 엔드포인트
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Path
 from typing import Optional
 from src.api.v1.travel import travel_svc
 from src.api.v1.travel.travel_dto import (
     TravelListRequestDTO, TravelListResponseDTO,
-    TravelCategoryEnum, SortTypeEnum
+    TravelCategoryEnum, SortTypeEnum, TravelDetailResponseDTO,
+    WeatherResponseDTO
 )
 from src.library.exception import APIResponse
 from src.config.status import SUC, ERR
@@ -24,6 +25,35 @@ router = APIRouter(
     tags=["Travel"],
     responses=Status.docs(ERR.BAD_REQUEST, ERR.TOO_MANY_REQUESTS, ERR.INTERNAL_ERROR)
 )
+
+
+@router.get(
+    "/weather",
+    response_model=APIResponse,
+    **travel_docs.get_weather_docs
+)
+async def get_weather(
+    lat: float = Query(..., ge=33.0, le=39.0, description="사용자 위치의 위도"),
+    lng: float = Query(..., ge=124.0, le=132.0, description="사용자 위치의 경도")
+):
+    """
+    사용자의 GPS 위치를 기반으로 현재 날씨 정보를 조회합니다.
+    """
+    try:
+        # 서비스 호출
+        result = await travel_svc.travel_service.get_weather(lat, lng)
+        
+        # 성공 응답
+        return SUC.OK.to_response(detail=result.model_dump())
+        
+    except ValueError as e:
+        # 유효성 검증 오류
+        _logger.error(f"Weather validation error: {str(e)}")
+        raise ERR.BAD_REQUEST.to_exception({"error": str(e)})
+    except Exception as e:
+        # 예상치 못한 오류
+        _logger.error(f"Weather API error: {str(e)}")
+        raise ERR.INTERNAL_ERROR.to_exception()
 
 
 @router.get(
@@ -68,4 +98,36 @@ async def get_nearby_attractions(
     except Exception as e:
         # 예상치 못한 오류
         _logger.error(f"Unexpected error in get_nearby_attractions: {str(e)}")
+        raise ERR.INTERNAL_ERROR.to_exception()
+
+
+@router.get(
+    "/attractions/{content_id}",
+    response_model=APIResponse,
+    **travel_docs.get_attraction_detail_docs
+)
+async def get_attraction_detail(
+    content_id: str = Path(..., description="관광지 고유 ID")
+):
+    """
+    특정 관광지의 상세 정보를 조회합니다.
+    """
+    try:
+        # 서비스 호출
+        result = await travel_svc.travel_service.get_attraction_detail(content_id)
+        
+        # 성공 응답
+        return SUC.OK.to_response(detail=result.model_dump())
+        
+    except ValueError as e:
+        # 유효성 검증 오류
+        _logger.error(f"Validation error: {str(e)}")
+        raise ERR.BAD_REQUEST.to_exception({"error": str(e)})
+    except Exception as e:
+        # NOT_FOUND 에러는 그대로 전달
+        if "404" in str(e) or "존재하지 않는 관광지" in str(e):
+            raise ERR.NOT_FOUND.to_exception(detail={"content_id": content_id})
+        
+        # 예상치 못한 오류
+        _logger.error(f"Unexpected error in get_attraction_detail: {str(e)}")
         raise ERR.INTERNAL_ERROR.to_exception()

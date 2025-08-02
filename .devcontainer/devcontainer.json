@@ -5,7 +5,9 @@
 	],
 	"service": "app",
 	"workspaceFolder": "/workspace",
-	// "features": { },
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {}
+	},
 	// "forwardPorts": [
 	// 	8000
 	// ],

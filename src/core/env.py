@@ -24,6 +24,9 @@ class Env(BaseSettings):
     LOG_TO_CONSOLE: bool = True
     LOG_ROTATE: bool = False
 
+    # 외부 API 키
+    TOUR_API_KEY: str  # 한국관광공사 API 인증키
+    
     class Config:
         # MODE 값에 따라 다른 env 파일 자동 선택
         env_file = (

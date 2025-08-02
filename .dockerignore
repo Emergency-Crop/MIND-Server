@@ -1,0 +1,9 @@
+.devcontainer/
+.vscode/
+.git/
+.pytest_cache/
+__pycache__/
+*.pyc
+.env
+README.md
+.gitignore

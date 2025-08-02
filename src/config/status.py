@@ -25,8 +25,11 @@ class ERR(ErrorMode):
     GONE = (410, "해당 리소스는 더 이상 유효하지 않습니다.")
     UNPROCESSABLE_ENTITY = (422, "입력값 유효성 검증에 실패했습니다.")
     TOO_MANY_REQUESTS = (429, "요청 횟수가 너무 많습니다. 잠시 후 다시 시도하세요.")
-    INTERNAL_SERVER_ERROR = (500, "서버 내부 오류가 발생했습니다.")
+    INTERNAL_ERROR = (500, "서버 내부 오류가 발생했습니다.")  # INTERNAL_SERVER_ERROR → INTERNAL_ERROR로 변경
+    INTERNAL_SERVER_ERROR = (500, "서버 내부 오류가 발생했습니다.")  # 하위 호환성을 위해 유지
+    BAD_GATEWAY = (502, "외부 API 연동 중 오류가 발생했습니다.")
     SERVICE_UNAVAILABLE = (503, "현재 서비스를 이용할 수 없습니다. 잠시 후 다시 시도하세요.")
+    GATEWAY_TIMEOUT = (504, "외부 API 응답 시간이 초과되었습니다.")
 
 class SUC(SuccessMode):
     """

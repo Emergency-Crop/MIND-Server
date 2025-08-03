@@ -1,0 +1,45 @@
+# Render 배포용 Dockerfile
+FROM python:3.11-slim
+
+# 시스템 패키지 업데이트 및 필요한 패키지 설치
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Poetry 설치
+RUN pip install poetry
+
+# Poetry가 가상환경을 생성하지 않도록 설정
+RUN poetry config virtualenvs.create false
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# Poetry 설정 파일 복사
+COPY pyproject.toml poetry.lock ./
+
+# 의존성 설치
+RUN poetry install --only=main --no-root
+
+# 소스 코드 복사
+COPY . .
+
+# 로그 디렉토리 생성
+RUN mkdir -p logs
+
+# 포트 노출 (Render에서 $PORT 환경 변수 사용)
+EXPOSE $PORT
+
+# 환경 변수 설정
+ENV PYTHONPATH=/app
+ENV MODE=production
+
+# 헬스체크 추가
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:$PORT/health/ || exit 1
+
+# 애플리케이션 실행 (Render의 $PORT 환경 변수 사용)
+CMD poetry run uvicorn src.main:app --host 0.0.0.0 --port $PORT 

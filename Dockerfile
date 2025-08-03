@@ -1,49 +1,45 @@
-# 빌드 스테이지
-FROM python:3.11-slim as builder
+# 멀티스테이지 빌드를 위한 베이스 이미지
+FROM python:3.11-slim AS base
 
-WORKDIR /app
+# 시스템 패키지 업데이트 및 필요한 패키지 설치
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Poetry 설치
 RUN pip install poetry
 
-# Poetry 설정
+# Poetry가 가상환경을 생성하지 않도록 설정
 RUN poetry config virtualenvs.create false
 
-# 의존성 파일 복사
-COPY pyproject.toml poetry.lock* ./
-
-# requirements.txt 생성
-RUN poetry export -f requirements.txt --output requirements.txt --without-hashes --without dev
-
-# 런타임 스테이지
-FROM python:3.11-slim
-
+# 작업 디렉토리 설정
 WORKDIR /app
 
-# 시스템 의존성 설치
-RUN apt-get update && apt-get install -y \
-    && rm -rf /var/lib/apt/lists/*
+# Poetry 설정 파일 복사
+COPY pyproject.toml poetry.lock ./
 
-# requirements.txt 복사 및 설치
-COPY --from=builder /app/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 의존성 설치
+RUN poetry install --only=main --no-root
 
 # 소스 코드 복사
-COPY src/ ./src/
-COPY migrations/ ./migrations/
+COPY . .
 
-# 환경변수 기본값 설정
-ENV PORT=8000
+# 로그 디렉토리 생성
+RUN mkdir -p logs
 
 # 포트 노출
-EXPOSE $PORT
+EXPOSE 8000
 
-# 소스 코드 복사
-COPY src/ ./src/
-COPY migrations/ ./migrations/
+# 환경 변수 설정
+ENV PYTHONPATH=/app
+ENV MODE=production
 
-# 포트 설정 (Render는 $PORT 환경변수 사용)
-EXPOSE $PORT
+# 헬스체크 추가
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health/ || exit 1
 
-# FastAPI 실행 명령
-CMD uvicorn src.main:app --host 0.0.0.0 --port $PORT
+# 애플리케이션 실행
+CMD ["poetry", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

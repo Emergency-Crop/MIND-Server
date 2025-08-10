@@ -26,6 +26,7 @@ class Env(BaseSettings):
 
     # 외부 API 키
     TOUR_API_KEY: str  # 한국관광공사 API 인증키
+    OPENAI_API_KEY: str  # OpenAI API 인증키
     
     class Config:
         # MODE 값에 따라 다른 env 파일 자동 선택

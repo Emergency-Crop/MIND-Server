@@ -13,7 +13,7 @@ from uuid import UUID
 class FeedRequestDTO(BaseModel):
     """피드 조회 요청 DTO"""
     user_id: UUID = Field(..., description="사용자 ID (UUID)")
-    limit: int = Field(default=20, ge=1, le=50, description="반환할 최대 결과 수")
+    limit: Optional[int] = Field(default=None, ge=1, le=1000, description="반환할 최대 결과 수 (지정하지 않으면 모든 결과 반환)")
     cursor: Optional[str] = Field(None, description="다음 페이지 커서 (Base64 인코딩)")
 
     @field_validator('user_id')
@@ -27,6 +27,7 @@ class TravelLogItemDTO(BaseModel):
     """여행 로그 항목 DTO"""
     id: UUID = Field(..., description="여행 로그 ID")
     created_at: datetime = Field(..., description="생성 시간")
+    archetype: str = Field(..., description="아키타입")
 
 
 class UserProfileDTO(BaseModel):
@@ -43,7 +44,7 @@ class FeedMetaDTO(BaseModel):
     user_profile: UserProfileDTO = Field(..., description="요청한 사용자 프로필")
     total_count: int = Field(..., description="총 결과 수")
     current_count: int = Field(..., description="현재 페이지 결과 수")
-    limit: int = Field(..., description="페이지당 결과 수")
+    limit: Optional[int] = Field(None, description="페이지당 결과 수 (None이면 모든 결과 반환)")
     has_more: bool = Field(..., description="더 많은 결과가 있는지 여부")
     next_cursor: Optional[str] = Field(None, description="다음 페이지 커서 (Base64 인코딩)")
 

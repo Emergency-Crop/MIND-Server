@@ -80,3 +80,46 @@ async def get_feed(
         # 예상치 못한 오류
         _logger.error(f"Unexpected error in get_feed: {str(e)}")
         raise ERR.INTERNAL_ERROR.to_exception()
+
+
+@router.get(
+    "/personalized",
+    response_model=APIResponse,
+    **feed_docs.get_personalized_feed_docs
+)
+async def get_personalized_feed(
+    user_id: UUID = Query(..., description="사용자 ID (UUID)"),
+    limit: Optional[int] = Query(default=None, ge=1, le=1000, description="반환할 최대 결과 수 (지정하지 않으면 모든 결과 반환)"),
+    cursor: Optional[str] = Query(None, description="다음 페이지 커서 (Base64 인코딩)")
+):
+    """
+    사용자의 과거 여행 로그 패턴을 분석하여 개인화된 피드를 제공합니다.
+    사용자가 자주 작성한 아키타입의 게시물에 높은 가중치를 부여하고,
+    최신순과 함께 점수 기반으로 정렬하여 반환합니다.
+    """
+    try:
+        # 요청 DTO 생성
+        request_dto = FeedRequestDTO(
+            user_id=user_id,
+            limit=limit,
+            cursor=cursor
+        )
+        
+        # 서비스 호출
+        result = await feed_svc.feed_service.get_personalized_feed(request_dto)
+        
+        # 성공 응답
+        return SUC.OK.to_response(detail=result.model_dump())
+        
+    except ValueError as e:
+        # 유효성 검증 오류
+        _logger.error(f"Personalized feed validation error: {str(e)}")
+        raise ERR.BAD_REQUEST.to_exception({"error": str(e)})
+    except Exception as e:
+        # NOT_FOUND 에러는 그대로 전달
+        if hasattr(e, 'status_code') and e.status_code == 404:
+            raise e
+        
+        # 예상치 못한 오류
+        _logger.error(f"Unexpected error in get_personalized_feed: {str(e)}")
+        raise ERR.INTERNAL_ERROR.to_exception()

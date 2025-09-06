@@ -33,47 +33,12 @@ get_feed_docs = {
                  파라미터    타입     필수   기본값    설명                          예시
          --------   ------   ----   ------   --------------------------   --------
          user_id    string    O      -       사용자 ID (UUID)             806787d0-2cd7-4b82-98c3-68e0...
-         limit      int       X      20      한 페이지 결과 수(최대 50)     20
+         limit      int       X      null    한 페이지 결과 수(최대 1000, null이면 모든 결과 반환)     20
          cursor     string    X      null    다음 페이지 커서(Base64)      eyJjcmVhdGVkX2F0IjoiMjAyNS0wOC0zMFQwMzowMDowMCJ9
 
-    ■ 커서 기반 페이지네이션 (Cursor-based Pagination) 상세 설명
-
-        📖 Limit (제한 개수)
-        • 의미: 한 번에 가져올 데이터의 최대 개수
-        • 범위: 1 ~ 50
-        • 예시: limit=2 → 최대 2개 데이터만 가져옴
-        • 용도: 한 페이지에 표시할 데이터 개수 제한
-
-        📖 Cursor (커서)
-        • 의미: 다음 페이지의 시작점을 나타내는 토큰
-        • 형식: Base64 인코딩된 JSON (created_at, id 포함)
-        • 예시: eyJjcmVhdGVkX2F0IjoiMjAyNS0wOC0zMFQwMzowMDowMCJ9
-        • 용도: 데이터 변경에 안전한 페이지네이션
-
-        📖 커서 기반 페이지네이션 장점
-        • ✅ 성능 최고: 인덱스 기반 조회로 빠름
-        • ✅ 안정성: 데이터 추가/삭제되어도 중복/누락 없음
-        • ✅ 무한 스크롤 최적: 인스타그램, 페이스북 등 대형 서비스 사용
-        • ✅ 확장성: 대용량 데이터 처리에 적합
-
-        📖 페이지네이션 사용 예시
-        총 5개의 여행 로그가 있을 때:
-        
-        • 첫 번째 페이지: limit=2, cursor=null
-          → 결과: [1번째, 2번째] 데이터
-          → meta: has_more=true, next_cursor=eyJjcmVhdGVkX2F0IjoiMjAyNS0wOC0zMFQwMzowMDowMCJ9
-        
-        • 두 번째 페이지: limit=2, cursor=eyJjcmVhdGVkX2F0IjoiMjAyNS0wOC0zMFQwMzowMDowMCJ9
-          → 결과: [3번째, 4번째] 데이터
-          → meta: has_more=true, next_cursor=eyJjcmVhdGVkX2F0IjoiMjAyNS0wOC0zMFQwMzowMDowMCJ9
-        
-        • 세 번째 페이지: limit=2, cursor=eyJjcmVhdGVkX2F0IjoiMjAyNS0wOC0zMFQwMzowMDowMCJ9
-          → 결과: [5번째] 데이터
-          → meta: has_more=false, next_cursor=null
-
-                 📖 실제 API 호출 예시
-         GET /feed?user_id=xxx&limit=2                    # 첫 번째 페이지
-         GET /feed?user_id=xxx&limit=2&cursor=eyJjcmVhdGVkX2F0IjoiMjAyNS0wOC0zMFQwMzowMDowMCJ9   # 두 번째 페이지
+    ■ 페이지네이션 사용 예시
+        GET /feed?user_id=xxx&limit=2                    # 첫 번째 페이지
+        GET /feed?user_id=xxx&limit=2&cursor=eyJjcmVhdGVkX2F0IjoiMjAyNS0wOC0zMFQwMzowMDowMCJ9   # 두 번째 페이지
 
     ■ 응답 데이터 구조
 
@@ -82,14 +47,10 @@ get_feed_docs = {
         meta           user_profile, total_count, pagination 정보
         items          TravelLogItemDTO 목록 (여행 로그들)
 
-    ■ 아키타입 설명
-        • adventurer    : 모험가 - 새로운 경험을 추구하는 여행자
-        • 고요한 회복러 : 평화로운 휴식을 선호하는 여행자
-        • 기타 아키타입들...
 
     ■ 제한사항
         • Rate Limiting: 분당 60회 제한
-        • 최대 결과 수: 한 번에 최대 50개까지 조회 가능
+        • 최대 결과 수: 한 번에 최대 1000개까지 조회 가능 (limit=null이면 모든 결과 반환)
         • 공개된 여행 로그만 조회 가능
         • 존재하지 않는 사용자 ID의 경우 404 에러 반환
 
@@ -124,17 +85,203 @@ get_feed_docs = {
                                                          "items": [
                                  {
                                      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-                                     "created_at": "2025-08-13T10:43:26.540889+00:00"
+                                     "created_at": "2025-08-13T10:43:26.540889+00:00",
+                                     "archetype": "adventurer"
                                  },
                                  {
                                      "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
-                                     "created_at": "2025-08-13T07:51:34.857736+00:00"
+                                     "created_at": "2025-08-13T07:51:34.857736+00:00",
+                                     "archetype": "adventurer"
                                  },
                                  {
                                      "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
-                                     "created_at": "2025-08-13T07:35:24.514219+00:00"
+                                     "created_at": "2025-08-13T07:35:24.514219+00:00",
+                                     "archetype": "adventurer"
                                  }
                              ]
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "잘못된 요청 (유효하지 않은 사용자 ID, 파라미터 범위 초과)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "BAD_REQUEST",
+                        "message": "요청 형식이 잘못되었습니다.",
+                        "detail": {
+                            "error": "유효하지 않은 사용자 ID입니다."
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "존재하지 않는 사용자",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "NOT_FOUND",
+                        "message": "존재하지 않는 사용자입니다.",
+                        "detail": {
+                            "user_id": "00000000-0000-0000-0000-000000000000"
+                        }
+                    }
+                }
+            }
+        },
+        429: {
+            "description": "요청 한도 초과 (분당 60회)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "TOO_MANY_REQUESTS",
+                        "message": "요청 횟수가 너무 많습니다. 잠시 후 다시 시도하세요.",
+                        "detail": {
+                            "retry_after": 30,
+                            "reset_time": "2025-08-30T02:30:00+09:00"
+                        }
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "서버 내부 오류",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "INTERNAL_ERROR",
+                        "message": "서버 내부 오류가 발생했습니다.",
+                        "detail": {}
+                    }
+                }
+            }
+        },
+        502: {
+            "description": "데이터베이스 연동 오류",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "BAD_GATEWAY",
+                        "message": "데이터베이스 연동 중 오류가 발생했습니다.",
+                        "detail": "Supabase 연결에 실패했습니다."
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+get_personalized_feed_docs = {
+    "summary": "개인화된 피드 조회",
+    "description": """
+    사용자의 과거 여행 로그 패턴을 분석하여 개인화된 피드를 제공합니다.
+    사용자가 자주 작성한 아키타입의 게시물에 높은 가중치를 부여하고,
+    최신순과 함께 점수 기반으로 정렬하여 반환합니다.
+
+    ■ 주요 기능
+        • 사용자 행동 패턴 분석 (과거 여행 로그 기반)
+        • 아키타입별 개인화된 가중치 적용
+        • 시간 가중치 (최신일수록 높은 점수)
+        • 자기 게시물 제외
+        • 공개 게시물만 조회
+        • 커서 기반 페이지네이션 지원
+    
+    ■ 추천 알고리즘
+        • 사용자 단계별 가중치 전략 (신규/초보/성장/숙련)
+        • 아키타입 빈도 기반 개인화 가중치
+        • 시간 가중치 (최신일수록 높은 점수)
+        • 동적 아키타입 조회 (데이터베이스 기반)
+
+    ■ 사용 시나리오
+        • 사용자가 자주 작성하는 아키타입의 게시물 우선 표시
+        • 새로운 아키타입도 발견할 수 있는 다양성 확보
+        • 최신 게시물과 개인 선호도의 균형
+        • 무한 스크롤을 위한 페이지네이션
+
+    ■ API 사용법
+        - 기본 사용 예시
+        GET /api/v1/feed/personalized?user_id=806787d0-2cd7-4b82-98c3-68e0...
+
+        - 페이지네이션 예시 (다음 페이지 요청)
+        GET /api/v1/feed/personalized?user_id=806787d0-2cd7-4b82-98c3-68e0...&limit=20&cursor=eyJzY29yZSI6IDEyMCwgImlkIjogIjUzOGYyOWM1LTVhYWMtNGE3Mi04MGIwLTNkYTVjMGY4NGFkYiJ9
+
+    ■ Query Parameters 설명
+
+        파라미터    타입     필수   기본값    설명                          예시
+        --------   ------   ----   ------   --------------------------   --------
+        user_id    string    O      -       사용자 ID (UUID)             806787d0-2cd7-4b82-98c3-68e0...
+        limit      int       X      null    한 페이지 결과 수(최대 1000, null이면 모든 결과 반환)     20
+        cursor     string    X      null    다음 페이지 커서(Base64)      eyJzY29yZSI6IDEyMCwgImlkIjogIjUzOGYyOWM1LTVhYWMtNGE3Mi04MGIwLTNkYTVjMGY4NGFkYiJ9
+
+    ■ 페이지네이션 사용 예시
+        GET /feed/personalized?user_id=xxx&limit=3                    # 첫 번째 페이지
+        GET /feed/personalized?user_id=xxx&limit=3&cursor=eyJzY29yZSI6IDEzMCwgImlkIjogIjUzOGYyOWM1LTVhYWMtNGE3Mi04MGIwLTNkYTVjMGY4NGFkYiJ9   # 두 번째 페이지
+        GET /feed/personalized?user_id=xxx                            # 모든 결과 반환 (limit=null)
+
+    ■ 응답 데이터 구조
+
+        필드 그룹        주요 정보
+        ------------   --------------------------
+        meta           user_profile, total_count, pagination 정보
+        items          TravelLogItemDTO 목록 (여행 로그들)
+
+
+    ■ 제한사항
+        • Rate Limiting: 분당 60회 제한
+        • 최대 결과 수: 한 번에 최대 1000개까지 조회 가능 (limit=null이면 모든 결과 반환)
+        • 공개된 여행 로그만 조회 가능
+        • 자기 게시물은 제외됨
+        • 존재하지 않는 사용자 ID의 경우 404 에러 반환
+
+    ■ 참고사항
+        • Supabase 데이터베이스와 연동
+        • 사용자 행동 패턴 기반 개인화된 콘텐츠 제공
+        • 점수 기반 정렬로 최적의 추천 순서 제공
+        • 시간 가중치로 최신성과 개인화의 균형""",
+    "responses": {
+        200: {
+            "description": "개인화된 피드 조회 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "OK",
+                        "message": "정상적으로 처리되었습니다.",
+                        "detail": {
+                            "meta": {
+                                "user_profile": {
+                                    "id": "806787d0-2cd7-4b82-98c3-68e0...",
+                                    "archetype": "adventurer",
+                                    "display_name": "r1h2w3",
+                                    "profile_image_url": None,
+                                    "bio": "새로운 여행을 시작하는 모험가입니다."
+                                },
+                                "total_count": 15,
+                                "current_count": 3,
+                                "limit": 3,
+                                "has_more": True,
+                                "next_cursor": "eyJzY29yZSI6IDEyMCwgImlkIjogIjUzOGYyOWM1LTVhYWMtNGE3Mi04MGIwLTNkYTVjMGY4NGFkYiJ9"
+                            },
+                            "items": [
+                                {
+                                    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                                    "created_at": "2025-08-13T10:43:26.540889+00:00",
+                                    "archetype": "힐링러"
+                                },
+                                {
+                                    "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+                                    "created_at": "2025-08-13T07:51:34.857736+00:00",
+                                    "archetype": "adventurer"
+                                },
+                                {
+                                    "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+                                    "created_at": "2025-08-13T07:35:24.514219+00:00",
+                                    "archetype": "감성 수집가"
+                                }
+                            ]
                         }
                     }
                 }

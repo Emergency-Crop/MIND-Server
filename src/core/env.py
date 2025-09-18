@@ -32,6 +32,10 @@ class Env(BaseSettings):
     SUPABASE_URL: str = "https://hfdkwhyfhfoyfowcbxvl.supabase.co"
     SUPABASE_ANON_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmZGt3aHlmaGZveWZvd2NieHZsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDg0OTgzNywiZXhwIjoyMDY2NDI1ODM3fQ.YHejg7fV2w5hzYbufXIUwRXIvHtVE1vJqyCbbPkT6Vw"
     
+    # Kakao REST API Key
+    KAKAO_REST_API_KEY: str | None = None
+    KAKAO_TIMEOUT: float = 10.0
+    
     class Config:
         # MODE 값에 따라 다른 env 파일 자동 선택
         env_file = (

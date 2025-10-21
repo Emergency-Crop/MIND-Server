@@ -68,6 +68,9 @@ class EmotionTagService:
                 ))
                 all_tags.extend(tags)
             
+            # 전체 태그에서 중복 제거 (순서 유지)
+            all_tags = list(dict.fromkeys(all_tags))
+            
             # 전체 아키타입 추출
             overall_archetype = self._determine_archetype(all_tags)
             
@@ -92,6 +95,9 @@ class EmotionTagService:
             
             # 유효한 태그만 필터링
             valid_tags = [tag for tag in tags if tag in self.emotion_tags]
+            
+            # 중복 태그 제거 (순서 유지)
+            valid_tags = list(dict.fromkeys(valid_tags))
             
             # 유효한 태그가 없거나 2개 미만이면 기본 태그 제공
             if len(valid_tags) < 2:

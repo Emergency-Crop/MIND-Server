@@ -7,6 +7,8 @@ Feed Service Module
 import httpx
 import base64
 import json
+import asyncio
+from functools import lru_cache
 from typing import List, Optional, Tuple, Dict
 from uuid import UUID
 from src.api.v1.feed.feed_dto import (
@@ -48,6 +50,9 @@ class FeedService:
         self.supabase_url = env.SUPABASE_URL
         self.supabase_key = env.SUPABASE_ANON_KEY
         self.timeout = httpx.Timeout(10.0)
+        # 사용자 가중치 캐시 (5분간 유효)
+        self._user_weights_cache = {}
+        self._cache_ttl = 300  # 5분
         
     async def test_supabase_connection(self) -> Dict:
         """
@@ -358,15 +363,28 @@ class FeedService:
     async def get_personalized_feed(self, dto: FeedRequestDTO) -> FeedResponseDTO:
         """
         사용자의 과거 여행 로그 패턴을 분석하여 개인화된 피드를 조회합니다.
+        병렬 처리를 통해 성능을 최적화합니다.
         """
         try:
-            # 1. 사용자 프로필 조회
-            user_profile = await self._get_user_profile(dto.user_id)
+            # 1. 사용자 프로필 조회와 아키타입 선호도 분석을 병렬로 실행
+            user_profile_task = self._get_user_profile(dto.user_id)
+            user_archetype_weights_task = self._analyze_user_archetype_preferences(dto.user_id)
+            
+            # 병렬 실행
+            user_profile, user_archetype_weights = await asyncio.gather(
+                user_profile_task,
+                user_archetype_weights_task,
+                return_exceptions=True
+            )
+            
+            # 예외 처리
+            if isinstance(user_profile, Exception):
+                raise user_profile
+            if isinstance(user_archetype_weights, Exception):
+                raise user_archetype_weights
+                
             if not user_profile:
                 raise ERR.NOT_FOUND.to_exception(detail={"user_id": str(dto.user_id)})
-            
-            # 2. 사용자의 아키타입 선호도 분석
-            user_archetype_weights = await self._analyze_user_archetype_preferences(dto.user_id)
             
             # 3. 개인화된 여행 로그 조회
             try:
@@ -408,7 +426,23 @@ class FeedService:
     async def _analyze_user_archetype_preferences(self, user_id: UUID) -> Dict[str, int]:
         """
         사용자의 여행 로그 개수에 따라 적응형 가중치를 계산합니다.
+        캐싱을 통해 성능을 최적화합니다.
         """
+        import time
+        
+        # 캐시 확인
+        cache_key = str(user_id)
+        current_time = time.time()
+        
+        if cache_key in self._user_weights_cache:
+            cached_data, cache_time = self._user_weights_cache[cache_key]
+            if current_time - cache_time < self._cache_ttl:
+                _logger.info(f"Using cached weights for user {user_id}")
+                return cached_data
+            else:
+                # 캐시 만료
+                del self._user_weights_cache[cache_key]
+        
         try:
             # 1. 사용자 프로필 조회 (아키타입 정보 필요)
             user_profile = await self._get_user_profile(user_id)
@@ -422,7 +456,10 @@ class FeedService:
             if user_logs_count == 0:
                 # 신규 사용자: 프로필 아키타입 우선
                 _logger.info(f"New user {user_id}: Using profile archetype {user_profile.archetype}")
-                return {user_profile.archetype: self.WEIGHT_PROFILE_ONLY}
+                weights = {user_profile.archetype: self.WEIGHT_PROFILE_ONLY}
+                # 캐시 저장
+                self._user_weights_cache[cache_key] = (weights, current_time)
+                return weights
             
             elif user_logs_count <= self.BEGINNER_THRESHOLD:
                 # 초보 사용자: 프로필 우선 + 다양성
@@ -433,6 +470,8 @@ class FeedService:
                 for archetype in other_archetypes:
                     if archetype != user_profile.archetype:
                         weights[archetype] = self.WEIGHT_OTHER_ARCHETYPES
+                # 캐시 저장
+                self._user_weights_cache[cache_key] = (weights, current_time)
                 return weights
             
             elif user_logs_count <= self.GROWING_THRESHOLD:
@@ -440,12 +479,18 @@ class FeedService:
                 _logger.info(f"Growing user {user_id}: Behavior + profile hybrid")
                 behavior_weights = await self._calculate_behavior_weights(user_id)
                 profile_weight = {user_profile.archetype: self.WEIGHT_PROFILE_HYBRID}
-                return self._merge_weights(behavior_weights, profile_weight, ratio=self.BEHAVIOR_RATIO)
+                weights = self._merge_weights(behavior_weights, profile_weight, ratio=self.BEHAVIOR_RATIO)
+                # 캐시 저장
+                self._user_weights_cache[cache_key] = (weights, current_time)
+                return weights
             
             else:
                 # 숙련 사용자: 완전 행동 패턴 기반
                 _logger.info(f"Expert user {user_id}: Full behavior-based")
-                return await self._calculate_behavior_weights(user_id)
+                weights = await self._calculate_behavior_weights(user_id)
+                # 캐시 저장
+                self._user_weights_cache[cache_key] = (weights, current_time)
+                return weights
                 
         except Exception as e:
             _logger.error(f"Error analyzing user archetype preferences: {str(e)}")
@@ -572,6 +617,17 @@ class FeedService:
         
         return merged_weights
 
+    def _create_cursor(self, post: dict) -> str:
+        """
+        게시물 정보로부터 커서를 생성합니다.
+        """
+        cursor_data = {
+            "score": post["score"],
+            "id": post["id"]
+        }
+        cursor_str = json.dumps(cursor_data)
+        return base64.b64encode(cursor_str.encode()).decode()
+
     async def _get_personalized_travel_logs(
         self, user_id: UUID, archetype_weights: Dict[str, int], limit: Optional[int], cursor: Optional[str] = None
     ) -> Tuple[List[TravelLogItemDTO], int, Optional[str]]:
@@ -579,33 +635,35 @@ class FeedService:
         개인화된 가중치를 적용하여 여행 로그를 조회합니다.
         """
         try:
-            # 1. 모든 공개 게시물 조회 (자기 게시물 제외)
+            # 1. 데이터베이스 레벨에서 자기 게시물 제외 및 필요한 만큼만 조회
             url = f"{self.supabase_url}/rest/v1/travel_logs"
             headers = {
                 "apikey": self.supabase_key,
                 "Authorization": f"Bearer {self.supabase_key}",
                 "Content-Type": "application/json"
             }
+            
+            # 최적화: 필요한 데이터만 조회 (자기 게시물 제외, limit 적용)
+            effective_limit = limit if limit is not None else 1000  # 기본 최대 1000개
             params = {
                 "is_public": "eq.true",  # 공개 게시물만
-                "select": "id,created_at,archetype,user_id",  # 디버깅을 위해 user_id도 포함
-                "order": "created_at.desc,id.desc"
+                "user_id": f"neq.{user_id}",  # 자기 게시물 제외 (DB 레벨)
+                "select": "id,created_at,archetype",  # 필요한 필드만
+                "order": "created_at.desc,id.desc",
+                "limit": str(effective_limit + 1)  # 다음 페이지 확인을 위해 +1
             }
             
-            # 모든 공개 게시물 조회 (자기 게시물은 애플리케이션 레벨에서 필터링)
-            url = f"{self.supabase_url}/rest/v1/travel_logs"
-            
-            _logger.info(f"Personalized feed query params: {params}")
+            _logger.info(f"Optimized personalized feed query params: {params}")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 
                 all_data = response.json()
+                _logger.info(f"Retrieved {len(all_data)} posts from database (already filtered)")
                 
-                # 2. 자기 게시물 필터링 (애플리케이션 레벨)
-                filtered_data = [item for item in all_data if item.get('user_id') != str(user_id)]
-                _logger.info(f"After filtering self-posts: {len(filtered_data)} (removed {len(all_data) - len(filtered_data)} self-posts)")
+                # 자기 게시물은 이미 DB에서 제외되었으므로 추가 필터링 불필요
+                filtered_data = all_data
                 
                 # 3. 각 게시물에 점수 계산
                 scored_posts = []
@@ -669,16 +727,18 @@ class FeedService:
                     except Exception as e:
                         _logger.warning(f"Invalid cursor format: {str(e)}")
                 
-                # 5. limit 처리 (None이면 모든 결과 반환)
+                # 5. limit 처리 최적화 (최대 1000개로 제한)
+                max_results = min(len(scored_posts), 1000)
                 if limit is None:
-                    # 모든 결과 반환
-                    actual_posts = scored_posts
-                    has_more = False
+                    # 모든 결과 반환 (최대 1000개)
+                    actual_posts = scored_posts[:max_results]
+                    has_more = len(scored_posts) > 1000
                 else:
                     # limit + 1개까지 가져와서 다음 커서 확인
-                    result_posts = scored_posts[:limit + 1]
-                    has_more = len(result_posts) > limit
-                    actual_posts = result_posts[:limit]
+                    effective_limit = min(limit, 1000)  # 최대 1000개로 제한
+                    result_posts = scored_posts[:effective_limit + 1]
+                    has_more = len(result_posts) > effective_limit
+                    actual_posts = result_posts[:effective_limit]
                 
                 # 6. TravelLogItemDTO로 변환
                 travel_logs = []
@@ -690,15 +750,10 @@ class FeedService:
                     )
                     travel_logs.append(travel_log)
                 
-                # 7. 다음 커서 생성
+                # 7. 다음 커서 생성 (최적화)
                 next_cursor = None
                 if has_more and actual_posts:
-                    last_post = actual_posts[-1]
-                    cursor_data = {
-                        "score": last_post["score"],
-                        "id": last_post["id"]
-                    }
-                    next_cursor = base64.b64encode(json.dumps(cursor_data).encode('utf-8')).decode('utf-8')
+                    next_cursor = self._create_cursor(actual_posts[-1])
                 
                 # 8. 전체 개수 (필터링된 결과의 총 개수)
                 total_count = len(scored_posts)

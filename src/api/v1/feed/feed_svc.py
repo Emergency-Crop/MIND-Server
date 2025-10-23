@@ -643,11 +643,10 @@ class FeedService:
                 "Content-Type": "application/json"
             }
             
-            # 최적화: 필요한 데이터만 조회 (자기 게시물 제외, limit 적용)
+            # 최적화: 필요한 데이터만 조회 (자기 게시물 포함, limit 적용)
             effective_limit = limit if limit is not None else 1000  # 기본 최대 1000개
             params = {
                 "is_public": "eq.true",  # 공개 게시물만
-                "user_id": f"neq.{user_id}",  # 자기 게시물 제외 (DB 레벨)
                 "select": "id,created_at,archetype",  # 필요한 필드만
                 "order": "created_at.desc,id.desc",
                 "limit": str(effective_limit + 1)  # 다음 페이지 확인을 위해 +1
@@ -660,9 +659,9 @@ class FeedService:
                 response.raise_for_status()
                 
                 all_data = response.json()
-                _logger.info(f"Retrieved {len(all_data)} posts from database (already filtered)")
+                _logger.info(f"Retrieved {len(all_data)} posts from database (including self-posts)")
                 
-                # 자기 게시물은 이미 DB에서 제외되었으므로 추가 필터링 불필요
+                # 자기 게시물도 포함하여 모든 공개 게시물 사용
                 filtered_data = all_data
                 
                 # 3. 각 게시물에 점수 계산
